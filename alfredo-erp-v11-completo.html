@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ALFREDO ERP V11 - Supermercado Inteligente</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* 5. REQUISITOS DE UI/UX (O "Design") - DARK MODE INDUSTRIAL */
+        :root {
+            --bg-main: #020617;
+            --bg-card: #0f172a;
+            --accent: #3b82f6;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --sidebar-width: 260px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: var(--bg-main); color: var(--text-main); overflow-x: hidden; line-height: 1.5; }
+
+        /* NAVEGAÇÃO: SIDEBAR FIXA */
+        .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: var(--sidebar-width); background-color: var(--bg-card); border-right: 1px solid #1e293b; padding: 1.5rem; z-index: 100; transition: transform 0.3s ease; }
+        .logo { font-size: 1.5rem; font-weight: 800; color: var(--accent); margin-bottom: 2rem; display: flex; align-items: center; gap: 0.75rem; }
+        .nav-item { display: flex; align-items: center; gap: 1rem; padding: 0.875rem 1rem; color: var(--text-dim); text-decoration: none; border-radius: 0.5rem; margin-bottom: 0.5rem; transition: all 0.2s; cursor: pointer; }
+        .nav-item:hover, .nav-item.active { background-color: #1e293b; color: var(--text-main); }
+        .nav-item.active i { color: var(--accent); }
+
+        /* CONTEÚDO PRINCIPAL */
+        main { margin-left: var(--sidebar-width); padding: 2rem; min-height: 100vh; }
+        .section { display: none; animation: fadeIn 0.3s ease; }
+        .section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* CARDS E GRIDS */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-top: 1.5rem; }
+        .card { background-color: var(--bg-card); border: 1px solid #1e293b; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .card-title { font-size: 1.125rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+
+        /* FORMULÁRIOS */
+        .form-group { margin-bottom: 1.25rem; }
+        label { display: block; font-size: 0.875rem; color: var(--text-dim); margin-bottom: 0.5rem; }
+        input, select, textarea { width: 100%; background-color: #020617; border: 1px solid #1e293b; border-radius: 0.5rem; padding: 0.75rem 1rem; color: var(--text-main); outline: none; transition: border-color 0.2s; }
+        input:focus { border-color: var(--accent); }
+        button { background-color: var(--accent); color: white; border: none; border-radius: 0.5rem; padding: 0.75rem 1.5rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+        button:active { opacity: 0.8; }
+        button.secondary { background-color: #1e293b; }
+
+        /* 1. ARQUITETURA DE SEGURANÇA: LOGIN */
+        #login-screen { position: fixed; inset: 0; background-color: var(--bg-main); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+        .login-card { width: 100%; max-width: 400px; background-color: var(--bg-card); padding: 2.5rem; border-radius: 1.5rem; border: 1px solid #1e293b; text-align: center; }
+
+        /* TABELAS */
+        .table-container { overflow-x: auto; margin-top: 1rem; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { padding: 1rem; color: var(--text-dim); font-size: 0.875rem; border-bottom: 1px solid #1e293b; }
+        td { padding: 1rem; border-bottom: 1px solid #1e293b; }
+
+        /* BADGES E SEMÁFOROS */
+        .badge { padding: 0.25rem 0.625rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .bg-danger { background-color: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .bg-warning { background-color: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .bg-success { background-color: rgba(16, 185, 129, 0.2); color: #34d399; }
+
+        /* 3. MODO IMPRESSÃO TÉRMICA */
+        @media print {
+            body * { visibility: hidden; }
+            #receipt-print, #receipt-print * { visibility: visible; }
+            #receipt-print { position: absolute; left: 0; top: 0; width: 80mm; color: black; background: white; padding: 5mm; font-family: 'Courier New', Courier, monospace; }
+            .no-print { display: none !important; }
+        }
+
+        /* RESPONSIVIDADE MOBILE */
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            main { margin-left: 0; padding: 1rem; }
+            .mobile-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem; background-color: var(--bg-card); border-bottom: 1px solid #1e293b; position: sticky; top: 0; z-index: 90; }
+        }
+
+        @media (min-width: 769px) { .mobile-header { display: none; } }
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN MESTRE (C47444) -->
+    <div id="login-screen">
+        <div class="login-card">
+            <div class="logo" style="justify-content: center;"><i class="fas fa-vault"></i> ALFREDO ERP V11</div>
+            <p style="color: var(--text-dim); margin-bottom: 2rem;">Insira a Chave Mestre para acessar</p>
+            <div class="form-group">
+                <input type="password" id="master-pass" placeholder="Senha C47444" autofocus>
+            </div>
+            <button onclick="checkAuth()">Entrar no Sistema</button>
+            <button class="secondary" style="margin-top: 1rem;" onclick="accessPublic()">Acesso Público</button>
+        </div>
+    </div>
+
+    <!-- HEADER MOBILE -->
+    <div class="mobile-header">
+        <div class="logo" style="margin-bottom: 0;"><i class="fas fa-bolt"></i> V11</div>
+        <i class="fas fa-bars" onclick="toggleSidebar()" style="font-size: 1.5rem;"></i>
+    </div>
+
+    <!-- SIDEBAR -->
+    <nav class="sidebar" id="sidebar">
+        <div class="logo"><i class="fas fa-shop"></i> ALFREDO V11</div>
+        <div class="nav-item active" onclick="showSection('dashboard')"><i class="fas fa-chart-line"></i> Dashboard</div>
+        <div class="nav-item admin-only" onclick="showSection('rh')"><i class="fas fa-users"></i> Gestão de RH</div>
+        <div class="nav-item admin-only" onclick="showSection('financeiro')"><i class="fas fa-calculator"></i> Financeiro / VR</div>
+        <div class="nav-item" onclick="showSection('perdas')"><i class="fas fa-eye"></i> Prevenção Perdas</div>
+        <div class="nav-item" onclick="showSection('treinamento')"><i class="fas fa-graduation-cap"></i> Treinamento</div>
+        <div class="nav-item admin-only" onclick="showSection('admin')"><i class="fas fa-gears"></i> Administração</div>
+        <div style="position: absolute; bottom: 1.5rem; width: calc(100% - 3rem);">
+            <button class="secondary" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Sair</button>
+        </div>
+    </nav>
+
+    <!-- CONTEÚDO -->
+    <main>
+        <!-- DASHBOARD -->
+        <section id="dashboard" class="section active">
+            <h1>Dashboard Operacional</h1>
+            <p style="color: var(--text-dim);">Visão geral da unidade Alfredo Supermercado</p>
+            <div class="grid">
+                <div class="card"><div class="card-title"><i class="fas fa-calendar-check"></i> Projeção de Folgas (7 Dias)</div><div id="folgas-projection"></div></div>
+                <div class="card"><div class="card-title"><i class="fas fa-star"></i> Top Score Elite</div><div id="top-scores"></div></div>
+                <div class="card"><div class="card-title"><i class="fas fa-triangle-exclamation"></i> Alertas Validade</div><div id="validade-alerts"></div></div>
+            </div>
+        </section>
+
+        <!-- GESTÃO DE RH -->
+        <section id="rh" class="section admin-only">
+            <h1>Gestão de RH & Escalas</h1>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">Cadastrar Colaborador</div>
+                    <div class="form-group"><label>Nome Completo</label><input type="text" id="rh-nome"></div>
+                    <div class="form-group"><label>Tipo de Escala</label><select id="rh-escala-tipo" onchange="toggleEscalaInput()"><option value="3x1">Rotativa 3x1</option><option value="fixa">Folga Fixa</option></select></div>
+                    <div class="form-group" id="input-3x1"><label>Data de Início (Escala 3x1)</label><input type="date" id="rh-data-inicio"></div>
+                    <div class="form-group" id="input-fixa" style="display:none;"><label>Dia da Folga</label><select id="rh-dia-folga"><option value="0">Domingo</option><option value="1">Segunda</option><option value="2">Terça</option><option value="3">Quarta</option><option value="4">Quinta</option><option value="5">Sexta</option><option value="6">Sábado</option></select></div>
+                    <button onclick="saveColaborador()">Salvar Colaborador</button>
+                </div>
+                <div class="card">
+                    <div class="card-title">Lançar Ocorrência</div>
+                    <div class="form-group"><label>Colaborador</label><select id="ocorr-colab"></select></div>
+                    <div class="form-group"><label>Tipo</label><select id="ocorr-tipo"><option value="falta">Falta Injustificada (-20)</option><option value="atestado">Atestado Médico (-5)</option><option value="atraso">Atraso/Saída Antecipada (-2)</option></select></div>
+                    <button onclick="addOcorrencia()">Registrar Ocorrência</button>
+                </div>
+            </div>
+            <div class="card" style="margin-top: 1.5rem;"><div class="card-title">Quadro de Equipe & Score de Elite</div><div class="table-container"><table><thead><tr><th>Nome</th><th>Escala</th><th>Status Hoje</th><th>Score Elite</th><th>Ações</th></tr></thead><tbody id="table-equipe-body"></tbody></table></div></div>
+        </section>
+
+        <!-- FINANCEIRO / VR -->
+        <section id="financeiro" class="section admin-only">
+            <h1>VR Master & Financeiro</h1>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">Calculadora de Markup Reverso</div>
+                    <div class="form-group"><label>Custo de Aquisição (R$)</label><input type="number" id="mk-custo" step="0.01"></div>
+                    <div class="form-group"><label>Margem Desejada (%)</label><input type="number" id="mk-margem" value="30"></div>
+                    <div class="form-group"><label>Impostos + Operacional (%)</label><input type="number" id="mk-impostos" value="15"></div>
+                    <button onclick="calcMarkup()">Calcular Preço Venda</button>
+                    <div id="mk-result" style="margin-top: 1rem; font-size: 1.25rem; font-weight: bold; color: var(--success);"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Gerador de Recibos Profissional</div>
+                    <div class="form-group"><label>Favorecido</label><input type="text" id="rc-nome"></div>
+                    <div class="form-group"><label>Valor (R$)</label><input type="number" id="rc-valor" step="0.01"></div>
+                    <div class="form-group"><label>Referente a</label><textarea id="rc-obs" rows="2"></textarea></div>
+                    <button onclick="generateReceipt()">Gerar Recibo</button>
+                </div>
+            </div>
+            <div id="receipt-container" style="display:none; margin-top: 1.5rem;"><div class="card" id="receipt-print"><h2 style="text-align:center; border-bottom: 1px dashed #000; padding-bottom: 5px;">ALFREDO SUPERMERCADO</h2><p style="margin-top: 10px;"><strong>RECIBO DE PAGAMENTO</strong></p><p style="margin-top: 10px;">VALOR: <span id="p-valor"></span></p><p>RECEBI DE: ALFREDO SUPERMERCADO</p><p>A QUANTIA DE: <span id="p-extenso" style="text-transform: uppercase;"></span></p><p>REFERENTE A: <span id="p-obs"></span></p><p style="margin-top: 20px;">FAVORECIDO: <span id="p-nome"></span></p><div style="margin-top: 30px; border-top: 1px solid #000; text-align: center;">Assinatura</div><p style="font-size: 10px; text-align: center; margin-top: 10px;">Data: <span id="p-data"></span></p><button class="no-print" style="margin-top: 1rem;" onclick="window.print()">Imprimir (Térmica 80mm)</button></div></div>
+        </section>
+
+        <!-- PREVENÇÃO DE PERDAS -->
+        <section id="perdas" class="section">
+            <h1>Logística & Prevenção</h1>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">Semáforo de Validade</div>
+                    <div class="form-group"><label>Produto</label><input type="text" id="pv-produto"></div>
+                    <div class="form-group"><label>Data de Vencimento</label><input type="date" id="pv-data"></div>
+                    <button onclick="addValidade()">Registrar no Semáforo</button>
+                </div>
+                <div class="card">
+                    <div class="card-title">Checklist "Olho do Dono"</div>
+                    <div id="checklist-items"><div style="display:flex; gap:10px; margin-bottom:10px;"><input type="checkbox" id="ck-1" style="width:auto;"> <label for="ck-1">Limpeza de Gôndolas OK?</label></div><div style="display:flex; gap:10px; margin-bottom:10px;"><input type="checkbox" id="ck-2" style="width:auto;"> <label for="ck-2">Precificação Atualizada?</label></div><div style="display:flex; gap:10px; margin-bottom:10px;"><input type="checkbox" id="ck-3" style="width:auto;"> <label for="ck-3">Organização de Depósito?</label></div><div style="display:flex; gap:10px; margin-bottom:10px;"><input type="checkbox" id="ck-4" style="width:auto;"> <label for="ck-4">Frente de Caixa Limpa?</label></div></div>
+                    <button onclick="saveChecklist()">Salvar Auditoria Diária</button>
+                </div>
+            </div>
+            <div class="card" style="margin-top: 1.5rem;"><div class="card-title">Produtos em Monitoramento</div><div class="table-container"><table><thead><tr><th>Produto</th><th>Vencimento</th><th>Status</th><th>Ação Sugerida</th></tr></thead><tbody id="table-perdas-body"></tbody></table></div></div>
+        </section>
+
+        <!-- TREINAMENTO -->
+        <section id="treinamento" class="section">
+            <h1>Centro de Treinamento</h1>
+            <div class="grid">
+                <div class="card"><div class="card-title"><i class="fas fa-book"></i> Manuais Operacionais</div><ul style="list-style: none; color: var(--text-dim);"><li style="margin-bottom: 0.5rem;"><i class="fas fa-file-pdf"></i> Padrão de Atendimento V3</li><li style="margin-bottom: 0.5rem;"><i class="fas fa-file-pdf"></i> Manual de Higiene e Segurança</li><li style="margin-bottom: 0.5rem;"><i class="fas fa-file-pdf"></i> Operação de Caixa Alfredo</li></ul></div>
+                <div class="card"><div class="card-title"><i class="fas fa-video"></i> Vídeos de Treinamento</div><div style="aspect-ratio: 16/9; background: #000; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center;"><i class="fas fa-play-circle" style="font-size: 3rem; color: var(--accent);"></i></div></div>
+            </div>
+        </section>
+
+        <!-- ADMINISTRAÇÃO -->
+        <section id="admin" class="section admin-only">
+            <h1>Administração do Sistema</h1>
+            <div class="grid">
+                <div class="card"><div class="card-title">Soberania de Dados</div><p style="color: var(--text-dim); margin-bottom: 1.5rem;">Gerencie o backup local do sistema.</p><div style="display:flex; gap:1rem;"><button onclick="exportData()"><i class="fas fa-download"></i> Exportar JSON</button><button class="secondary" onclick="document.getElementById('import-file').click()"><i class="fas fa-upload"></i> Importar JSON</button><input type="file" id="import-file" style="display:none;" onchange="importData(event)"></div></div>
+                <div class="card"><div class="card-title">Limpar Sistema</div><p style="color: var(--text-dim); margin-bottom: 1.5rem;">Atenção: Isso apagará todos os dados locais.</p><button class="secondary" style="background-color: var(--danger);" onclick="resetSystem()">RESET TOTAL</button></div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // 1. ARQUITETURA DE SEGURANÇA E ACESSO
+        let db = { colaboradores: [], perdas: [], checklists: [], ocorrencias: [] };
+        let isAdmin = false;
+
+        window.onload = () => {
+            const savedData = localStorage.getItem('alfredo_db_v11');
+            if (savedData) db = JSON.parse(savedData);
+            updateUI();
+        };
+
+        function checkAuth() {
+            if (document.getElementById('master-pass').value === 'C47444') {
+                isAdmin = true;
+                document.getElementById('login-screen').style.display = 'none';
+                document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'flex');
+                showSection('dashboard');
+            } else alert('Senha Mestre Incorreta!');
+        }
+
+        function accessPublic() {
+            isAdmin = false;
+            document.getElementById('login-screen').style.display = 'none';
+            document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+            showSection('treinamento');
+        }
+
+        function logout() { isAdmin = false; document.getElementById('login-screen').style.display = 'flex'; document.getElementById('master-pass').value = ''; }
+
+        function showSection(id) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            if (event) event.currentTarget.classList.add('active');
+            if (window.innerWidth <= 768) toggleSidebar();
+            updateUI();
+        }
+
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+
+        // 2. INTELIGÊNCIA DE RH
+        function toggleEscalaInput() {
+            const tipo = document.getElementById('rh-escala-tipo').value;
+            document.getElementById('input-3x1').style.display = tipo === '3x1' ? 'block' : 'none';
+            document.getElementById('input-fixa').style.display = tipo === 'fixa' ? 'block' : 'none';
+        }
+
+        function saveColaborador() {
+            const nome = document.getElementById('rh-nome').value;
+            const tipo = document.getElementById('rh-escala-tipo').value;
+            if (!nome) return alert('Preencha o nome');
+            db.colaboradores.push({ id: Date.now(), nome, tipo, dataInicio: document.getElementById('rh-data-inicio').value, diaFolga: parseInt(document.getElementById('rh-dia-folga').value) });
+            saveDB(); updateUI(); alert('Colaborador Cadastrado!');
+        }
+
+        function calculateStatus(colab) {
+            const hoje = new Date(); hoje.setHours(0,0,0,0);
+            if (colab.tipo === 'fixa') return hoje.getDay() === colab.diaFolga ? 'FOLGA' : 'TRABALHO';
+            const inicio = new Date(colab.dataInicio); inicio.setHours(0,0,0,0);
+            const diff = Math.floor((hoje - inicio) / 86400000);
+            return diff < 0 ? 'PENDENTE' : (diff % 4 === 3 ? 'FOLGA' : 'TRABALHO');
+        }
+
+        function calculateScore(colabId) {
+            let score = 100;
+            db.ocorrencias.filter(o => o.colabId === colabId).forEach(o => {
+                if (o.tipo === 'falta') score -= 20;
+                else if (o.tipo === 'atestado') score -= 5;
+                else if (o.tipo === 'atraso') score -= 2;
+            });
+            return Math.max(0, score);
+        }
+
+        function addOcorrencia() {
+            const colabId = parseInt(document.getElementById('ocorr-colab').value);
+            db.ocorrencias.push({ colabId, tipo: document.getElementById('ocorr-tipo').value, data: new Date().toISOString() });
+            saveDB(); updateUI(); alert('Ocorrência Registrada!');
+        }
+
+        // 3. VR MASTER & FINANCEIRO
+        function calcMarkup() {
+            const custo = parseFloat(document.getElementById('mk-custo').value);
+            const margem = parseFloat(document.getElementById('mk-margem').value) / 100;
+            const impostos = parseFloat(document.getElementById('mk-impostos').value) / 100;
+            if (custo) document.getElementById('mk-result').innerText = `Preço Sugerido: R$ ${(custo / (1 - (margem + impostos))).toFixed(2)}`;
+        }
+
+        function generateReceipt() {
+            const nome = document.getElementById('rc-nome').value, valor = parseFloat(document.getElementById('rc-valor').value), obs = document.getElementById('rc-obs').value;
+            if (!nome || !valor) return alert('Preencha os dados');
+            document.getElementById('p-nome').innerText = nome; document.getElementById('p-valor').innerText = `R$ ${valor.toFixed(2)}`;
+            document.getElementById('p-obs').innerText = obs; document.getElementById('p-extenso').innerText = valorParaExtenso(valor);
+            document.getElementById('p-data').innerText = new Date().toLocaleDateString();
+            document.getElementById('receipt-container').style.display = 'block';
+        }
+
+        function valorParaExtenso(valor) {
+            const unidades = ["", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove"], dezena1 = ["dez", "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"], dezenas = ["", "", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa"], centenas = ["", "cem", "duzentos", "trezentos", "quatrocentos", "quinhentos", "seiscentos", "setecentos", "oitocentos", "novecentos"];
+            if (valor === 0) return "zero reais";
+            let inteiro = Math.floor(valor), centavos = Math.round((valor - inteiro) * 100);
+            function converter(n) { if (n < 10) return unidades[n]; if (n < 20) return dezena1[n - 10]; if (n < 100) return dezenas[Math.floor(n / 10)] + (n % 10 !== 0 ? " e " + unidades[n % 10] : ""); if (n === 100) return "cem"; return centenas[Math.floor(n / 100)] + (n % 100 !== 0 ? " e " + converter(n % 100) : ""); }
+            let texto = converter(inteiro) + (inteiro === 1 ? " real" : " reais");
+            if (centavos > 0) texto += " e " + converter(centavos) + (centavos === 1 ? " centavo" : " centavos");
+            return texto;
+        }
+
+        // 4. LOGÍSTICA & PERDAS
+        function addValidade() {
+            const produto = document.getElementById('pv-produto').value, data = document.getElementById('pv-data').value;
+            if (produto && data) { db.perdas.push({ id: Date.now(), produto, vencimento: data }); saveDB(); updateUI(); alert('Produto Registrado!'); }
+        }
+
+        function getValidadeStatus(dataStr) {
+            const hoje = new Date(); hoje.setHours(0,0,0,0); const venc = new Date(dataStr); venc.setHours(0,0,0,0);
+            const diff = Math.ceil((venc - hoje) / 86400000);
+            if (diff < 0) return { label: 'VENCIDO', class: 'bg-danger', acao: 'Descartar' };
+            if (diff <= 3) return { label: 'CRÍTICO', class: 'bg-danger', acao: 'Liquidação' };
+            if (diff <= 7) return { label: 'ALERTA', class: 'bg-warning', acao: 'Revezar' };
+            return { label: 'SEGURO', class: 'bg-success', acao: 'Monitorar' };
+        }
+
+        function saveChecklist() { db.checklists.push({ data: new Date().toISOString(), itens: [document.getElementById('ck-1').checked, document.getElementById('ck-2').checked, document.getElementById('ck-3').checked, document.getElementById('ck-4').checked] }); saveDB(); alert('Auditoria Salva!'); }
+
+        // UTILITÁRIOS
+        function saveDB() { localStorage.setItem('alfredo_db_v11', JSON.stringify(db)); }
+        function updateUI() {
+            const selectColab = document.getElementById('ocorr-colab'); selectColab.innerHTML = db.colaboradores.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+            const tbodyEquipe = document.getElementById('table-equipe-body');
+            tbodyEquipe.innerHTML = db.colaboradores.map(c => {
+                const status = calculateStatus(c), score = calculateScore(c.id);
+                return `<tr><td>${c.nome}</td><td>${c.tipo}</td><td><span class="badge ${status === 'FOLGA' ? 'bg-success' : 'bg-warning'}">${status}</span></td><td><span style="font-weight:bold; color:${score > 80 ? 'var(--success)' : 'var(--danger)'}">${score}</span></td><td><button class="secondary" style="padding:4px 8px; font-size:12px;" onclick="removeColab(${c.id})">Excluir</button></td></tr>`;
+            }).join('');
+            const tbodyPerdas = document.getElementById('table-perdas-body');
+            tbodyPerdas.innerHTML = db.perdas.map(p => {
+                const status = getValidadeStatus(p.vencimento);
+                return `<tr><td>${p.produto}</td><td>${new Date(p.vencimento).toLocaleDateString()}</td><td><span class="badge ${status.class}">${status.label}</span></td><td style="font-size:13px; color:var(--text-dim)">${status.acao}</td></tr>`;
+            }).join('');
+            const folgasProj = document.getElementById('folgas-projection'); let projHTML = '';
+            for(let i=0; i<7; i++) {
+                const d = new Date(); d.setDate(d.getDate() + i);
+                const count = db.colaboradores.filter(c => {
+                    if (c.tipo === 'fixa') return d.getDay() === c.diaFolga;
+                    const inicio = new Date(c.dataInicio); return Math.floor((d - inicio) / 86400000) % 4 === 3;
+                }).length;
+                projHTML += `<div style="display:flex; justify-content:space-between; margin-bottom:8px; padding:8px; background:#020617; border-radius:8px;"><span>${d.toLocaleDateString('pt-BR', {weekday:'short'})} (${d.getDate()})</span><span class="badge bg-success">${count} Folgas</span></div>`;
+            }
+            folgasProj.innerHTML = projHTML;
+            const topScores = document.getElementById('top-scores');
+            topScores.innerHTML = [...db.colaboradores].sort((a,b) => calculateScore(b.id) - calculateScore(a.id)).slice(0, 3).map(c => `<div style="margin-bottom:10px;"><div style="display:flex; justify-content:space-between;"><span>${c.nome}</span><span style="color:var(--accent)">${calculateScore(c.id)} pts</span></div><div style="width:100%; height:4px; background:#1e293b; margin-top:4px;"><div style="width:${calculateScore(c.id)}%; height:100%; background:var(--accent);"></div></div></div>`).join('');
+            const alerts = document.getElementById('validade-alerts');
+            alerts.innerHTML = `<div style="text-align:center; padding:1rem;"><div style="font-size:2.5rem; font-weight:bold; color:var(--danger)">${db.perdas.filter(p => getValidadeStatus(p.vencimento).label === 'CRÍTICO').length}</div><div style="color:var(--text-dim)">Produtos Críticos</div></div>`;
+        }
+
+        function removeColab(id) { if(confirm('Remover?')) { db.colaboradores = db.colaboradores.filter(c => c.id !== id); saveDB(); updateUI(); } }
+        function exportData() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db)); const a = document.createElement('a'); a.href = dataStr; a.download = "alfredo_erp_backup.json"; a.click(); }
+        function importData(e) { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => { db = JSON.parse(ev.target.result); saveDB(); updateUI(); alert('Importado!'); }; r.readAsText(f); }
+        function resetSystem() { if(confirm('DANGER: Apagar tudo?')) { localStorage.clear(); location.reload(); } }
+    </script>
+</body>
+</html>
