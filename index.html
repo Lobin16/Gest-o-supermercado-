@@ -7372,17 +7372,19 @@ showSection = function(id) {
 // ═══════════════════════════════════════════
 //  PATCH: Adicionar data nascimento ao salvar colaborador
 // ═══════════════════════════════════════════
-const _origAddColab = typeof addColab === 'function' ? addColab : null;
-if (_origAddColab) {
-  const _realAddColab = addColab;
-  addColab = function() {
+const _origSaveColab = typeof saveColaborador === 'function' ? saveColaborador : null;
+if (_origSaveColab) {
+  const _realSaveColab = saveColaborador;
+  saveColaborador = function() {
     // Captura nascimento antes do original
     const nascimento = document.getElementById('rh-nascimento')?.value || '';
-    _realAddColab();
-    // Atribui ao último colaborador adicionado
-    if (nascimento && db.colaboradores.length) {
+    const countAntes = db.colaboradores.length;
+    _realSaveColab();
+    // Atribui ao último colaborador adicionado (se novo foi criado)
+    if (nascimento && db.colaboradores.length > countAntes) {
       const ultimo = db.colaboradores[db.colaboradores.length - 1];
       ultimo.dataNascimento = nascimento;
+      document.getElementById('rh-nascimento').value = '';
       saveDB();
     }
   };
