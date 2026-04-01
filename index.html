@@ -594,14 +594,20 @@ td{padding:.65rem 1rem;border-bottom:1px solid #1e293b;font-size:.85rem}
         <div class="fg"><label>Colaborador</label><select id="f-colab"></select></div>
         <div class="fg"><label>Data</label><input type="date" id="f-data"></div>
         <div class="fg"><label>Tipo</label>
-          <select id="f-tipo">
+          <select id="f-tipo" onchange="toggleFaltaAnexo()">
             <option value="falta_inj">Falta Injustificada (−20 pts)</option>
             <option value="falta_just">Falta Justificada / Atestado (−5 pts)</option>
             <option value="atraso">Atraso / Saída Antecipada (−2 pts)</option>
+            <option value="advertencia">Advertência por Escrito (−10 pts)</option>
           </select>
         </div>
         <div class="fg"><label>Observação</label><textarea id="f-obs" rows="2" placeholder="Detalhes opcionais..."></textarea></div>
-        <button onclick="addFalta()"><i class="fas fa-save"></i> Registrar Ocorrência</button>
+        <div class="fg" id="f-anexo-div">
+          <label><i class="fas fa-paperclip"></i> Anexar Documento (atestado, advertência, foto)</label>
+          <input type="file" id="f-anexo" accept="image/*,.pdf" multiple style="font-size:.82rem">
+          <p style="font-size:.72rem;color:var(--dim);margin-top:.3rem"><i class="fas fa-compress"></i> Fotos são comprimidas automaticamente para economizar espaço</p>
+        </div>
+        <button onclick="addFaltaComAnexo()"><i class="fas fa-save"></i> Registrar Ocorrência</button>
       </div>
       <div class="card">
         <div class="ct"><i class="fas fa-info-circle"></i> Tabela de Pontuação</div>
@@ -609,6 +615,7 @@ td{padding:.65rem 1rem;border-bottom:1px solid #1e293b;font-size:.85rem}
           <div class="row-item"><span>Falta Injustificada</span><span class="badge bdanger2">−20 pts</span></div>
           <div class="row-item"><span>Falta Justificada / Atestado</span><span class="badge bwarn2">−5 pts</span></div>
           <div class="row-item"><span>Atraso / Saída Antecipada</span><span class="badge bgray">−2 pts</span></div>
+          <div class="row-item"><span>Advertência por Escrito</span><span class="badge bdanger2">−10 pts</span></div>
           <div class="row-item"><span>Score inicial por mês</span><span class="badge bok2">100 pts</span></div>
         </div>
         <div style="margin-top:1rem;padding:.75rem;background:#020617;border-radius:.5rem;font-size:.78rem;color:var(--dim)">
@@ -7467,6 +7474,299 @@ setInterval(() => {
     }
   }
 }, 60 * 60 * 1000); // A cada 1 hora
+
+// ═══════════════════════════════════════════
+//  PATCH: calcScore para incluir advertência
+// ═══════════════════════════════════════════
+const _origCalcScore = calcScore;
+calcScore = function(colabId, mes) {
+  let score = _origCalcScore(colabId, mes);
+  const m = mes || db.mesAtual;
+  db.faltas.filter(f => f.colabId === colabId && f.data.startsWith(m) && f.tipo === 'advertencia').forEach(() => {
+    score -= 10;
+  });
+  return Math.max(0, score);
+};
+
+// ═══════════════════════════════════════════
+//  TOGGLE: mostrar/esconder campo anexo
+// ═══════════════════════════════════════════
+function toggleFaltaAnexo() {
+  // Sempre visível agora — qualquer tipo pode ter anexo
+}
+
+// ═══════════════════════════════════════════
+//  addFaltaComAnexo: registra falta + anexa fotos
+// ═══════════════════════════════════════════
+async function addFaltaComAnexo() {
+  const colabId = parseInt(document.getElementById('f-colab').value);
+  const data = document.getElementById('f-data').value;
+  const tipo = document.getElementById('f-tipo').value;
+  const obs = document.getElementById('f-obs').value;
+  if (!colabId || !data) return alert('Selecione colaborador e data');
+
+  // Registrar a falta
+  const faltaId = Date.now();
+  db.faltas = db.faltas.filter(f => !(f.colabId === colabId && f.data === data));
+  db.faltas.push({ id: faltaId, colabId, data, tipo, obs, mes: data.substring(0,7) });
+
+  // Processar anexos
+  const fileInput = document.getElementById('f-anexo');
+  if (fileInput && fileInput.files.length > 0) {
+    if (!db.anexos_faltas) db.anexos_faltas = [];
+    for (let i = 0; i < fileInput.files.length; i++) {
+      const file = fileInput.files[i];
+      mostrarIAPopup('Comprimindo foto ' + (i+1) + ' de ' + fileInput.files.length + '...');
+      const compressed = await comprimirImagem(file, 800, 0.6);
+      db.anexos_faltas.push({
+        id: Date.now() + i,
+        faltaId,
+        foto: compressed,
+        nome: file.name,
+        data: new Date().toISOString(),
+        tamanhoOriginal: file.size,
+        tamanhoComprimido: compressed.length
+      });
+    }
+    fileInput.value = '';
+  }
+
+  document.getElementById('f-data').value = '';
+  document.getElementById('f-obs').value = '';
+  saveDB(); updateUI();
+  const numAnexos = (db.anexos_faltas || []).filter(a => a.faltaId === faltaId).length;
+  alert('Ocorrência registrada!' + (numAnexos ? ' (' + numAnexos + ' anexo(s) salvos)' : ''));
+}
+
+// ═══════════════════════════════════════════
+//  PATCH: pesquisarFaltas para mostrar botões de anexo e WhatsApp
+// ═══════════════════════════════════════════
+const _origPesquisarFaltas = pesquisarFaltas;
+pesquisarFaltas = function() {
+  const colabId = document.getElementById('fp-colab').value;
+  const mes = document.getElementById('fp-mes').value;
+  let faltas = [...db.faltas];
+  if (mes) {
+    const hf = db.historico[mes]?.faltas || [];
+    faltas = [...faltas, ...hf].filter((f,i,a) => a.findIndex(x => x.id === f.id) === i);
+  }
+  if (colabId) faltas = faltas.filter(f => f.colabId === parseInt(colabId));
+  if (mes) faltas = faltas.filter(f => f.data.startsWith(mes));
+  faltas.sort((a,b) => b.data.localeCompare(a.data));
+
+  const tipoLabel = { falta_inj:'Falta Injustificada', falta_just:'Falta Justificada', atraso:'Atraso', advertencia:'Advertência' };
+  const tipoCls = { falta_inj:'bdanger2', falta_just:'bwarn2', atraso:'bgray', advertencia:'bdanger2' };
+
+  if (!faltas.length) {
+    document.getElementById('fp-resultado').innerHTML = '<div class="card" style="text-align:center;padding:2rem;color:var(--dim)"><i class="fas fa-check-circle" style="font-size:2rem;color:var(--ok);display:block;margin-bottom:.75rem"></i>Nenhuma ocorrência encontrada</div>';
+    return;
+  }
+
+  const grupos = {};
+  faltas.forEach(f => {
+    const colab = db.colaboradores.find(c => c.id === f.colabId);
+    const nome = colab ? colab.nome : 'Colaborador #' + f.colabId;
+    if (!grupos[nome]) grupos[nome] = { fs:[], colabId: f.colabId };
+    grupos[nome].fs.push(f);
+  });
+
+  let html = '';
+  Object.entries(grupos).forEach(([nome, {fs, colabId: cid}]) => {
+    const inj = fs.filter(f=>f.tipo==='falta_inj').length;
+    const just = fs.filter(f=>f.tipo==='falta_just').length;
+    const atr = fs.filter(f=>f.tipo==='atraso').length;
+    const adv = fs.filter(f=>f.tipo==='advertencia').length;
+    html += '<div class="card" style="margin-bottom:1rem"><div class="ct">' + nome + '</div>';
+    html += '<div class="g4" style="margin-bottom:1rem">';
+    html += '<div class="sb"><div class="sn" style="color:var(--danger)">' + inj + '</div><div class="sl">Injustificadas</div></div>';
+    html += '<div class="sb"><div class="sn" style="color:var(--warn)">' + just + '</div><div class="sl">Justificadas</div></div>';
+    html += '<div class="sb"><div class="sn">' + atr + '</div><div class="sl">Atrasos</div></div>';
+    html += '<div class="sb"><div class="sn" style="color:var(--danger)">' + adv + '</div><div class="sl">Advertências</div></div>';
+    html += '</div>';
+
+    fs.forEach(f => {
+      const [a,m,d] = f.data.split('-');
+      const numAnexos = (db.anexos_faltas || []).filter(ax => ax.faltaId === f.id).length;
+      html += '<div class="row-item" style="flex-direction:column;align-items:stretch;gap:.4rem">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.3rem">';
+      html += '<div><span class="badge ' + (tipoCls[f.tipo]||'bgray') + '">' + (tipoLabel[f.tipo]||f.tipo) + '</span>';
+      html += '<span style="font-size:.8rem;color:var(--dim);margin-left:.5rem">' + d + '/' + m + '/' + a + (f.obs?' — '+f.obs:'') + '</span></div>';
+      html += '<div style="display:flex;gap:.3rem;flex-wrap:wrap">';
+      // Botão anexar foto
+      html += '<button class="bs bsm" style="width:auto;font-size:.7rem" onclick="adicionarAnexoFalta(' + f.id + ')" title="Anexar foto"><i class="fas fa-paperclip"></i></button>';
+      // Botão ver anexos (com badge)
+      if (numAnexos > 0) {
+        html += '<button class="bs bsm" style="width:auto;font-size:.7rem;position:relative" onclick="verAnexosFalta(' + f.id + ')" title="Ver anexos"><i class="fas fa-image"></i> <span style="background:var(--accent);color:#fff;border-radius:50%;padding:0 .3rem;font-size:.6rem">' + numAnexos + '</span></button>';
+      }
+      // Botão enviar via WhatsApp
+      html += '<button class="bs bsm" style="width:auto;font-size:.7rem;background:rgba(37,211,102,.15);border-color:#25d366;color:#25d366" onclick="enviarFaltaWA(' + f.id + ')" title="Enviar via WhatsApp"><i class="fab fa-whatsapp"></i></button>';
+      // Botão remover
+      html += '<button class="bs bsm" style="width:auto;font-size:.7rem" onclick="removeFalta(' + f.id + ')">✕</button>';
+      html += '</div></div>';
+      // Preview de anexos inline
+      if (numAnexos > 0) {
+        const anexos = (db.anexos_faltas || []).filter(ax => ax.faltaId === f.id);
+        html += '<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.2rem">';
+        anexos.forEach(ax => {
+          html += '<img src="' + ax.foto + '" style="width:48px;height:48px;border-radius:.4rem;object-fit:cover;cursor:pointer;border:1px solid #1e293b" onclick="window.open(this.src)" title="' + ax.nome + '">';
+        });
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  document.getElementById('fp-resultado').innerHTML = html;
+};
+
+// ═══════════════════════════════════════════
+//  Enviar falta/documento via WhatsApp
+// ═══════════════════════════════════════════
+function enviarFaltaWA(faltaId) {
+  const f = db.faltas.find(x => x.id === faltaId);
+  if (!f) return alert('Ocorrência não encontrada');
+  const colab = db.colaboradores.find(c => c.id === f.colabId);
+  const nome = colab ? colab.nome : 'Colaborador #' + f.colabId;
+  const [a,m,d] = f.data.split('-');
+  const tipoLabel = { falta_inj:'Falta Injustificada', falta_just:'Falta Justificada / Atestado', atraso:'Atraso', advertencia:'Advertência por Escrito' };
+  const numAnexos = (db.anexos_faltas || []).filter(ax => ax.faltaId === faltaId).length;
+
+  // Escolher destino
+  const destino = prompt('Encaminhar para:\n1 - Contabilidade\n2 - Advogado\n3 - Outro\n\nDigite 1, 2 ou 3:');
+  if (!destino) return;
+  const destinoLabel = destino === '1' ? 'Contabilidade' : destino === '2' ? 'Advogado' : 'Responsável';
+
+  const msg = '📋 *DOCUMENTO — ALFREDO SUPERMERCADO*\n' +
+    '👤 *Para:* ' + destinoLabel + '\n\n' +
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+    '👷 *Colaborador:* ' + nome + '\n' +
+    (colab?.cargo ? '💼 *Cargo:* ' + colab.cargo + '\n' : '') +
+    (colab?.setor ? '🏢 *Setor:* ' + colab.setor + '\n' : '') +
+    '📅 *Data:* ' + d + '/' + m + '/' + a + '\n' +
+    '📌 *Tipo:* ' + (tipoLabel[f.tipo] || f.tipo) + '\n' +
+    (f.obs ? '📝 *Observação:* ' + f.obs + '\n' : '') +
+    '📎 *Anexos:* ' + (numAnexos > 0 ? numAnexos + ' documento(s) anexado(s)' : 'Nenhum') + '\n' +
+    '━━━━━━━━━━━━━━━━━━━━\n\n' +
+    (numAnexos > 0 ? '⚠️ _Os anexos (fotos) devem ser enviados separadamente pelo app._\n\n' : '') +
+    '_Gerado pelo Alfredo ERP V13 — ' + new Date().toLocaleDateString('pt-BR') + '_';
+
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+
+  // Se há anexos, oferecer download para envio separado
+  if (numAnexos > 0) {
+    const anexos = (db.anexos_faltas || []).filter(ax => ax.faltaId === faltaId);
+    if (confirm('Deseja baixar as ' + numAnexos + ' foto(s) para enviar pelo WhatsApp?')) {
+      anexos.forEach((ax, i) => {
+        const link = document.createElement('a');
+        link.href = ax.foto;
+        link.download = 'doc_' + nome.replace(/\s+/g,'_') + '_' + d + m + a + '_' + (i+1) + '.jpg';
+        link.click();
+      });
+    }
+  }
+}
+
+// ═══════════════════════════════════════════
+//  Enviar relatório completo de faltas via WhatsApp
+// ═══════════════════════════════════════════
+function enviarRelatorioFaltasWA() {
+  const colabId = document.getElementById('fp-colab').value;
+  const mes = document.getElementById('fp-mes').value;
+  let faltas = [...db.faltas];
+  if (mes) {
+    const hf = db.historico[mes]?.faltas || [];
+    faltas = [...faltas, ...hf].filter((f,i,a) => a.findIndex(x => x.id === f.id) === i);
+  }
+  if (colabId) faltas = faltas.filter(f => f.colabId === parseInt(colabId));
+  if (mes) faltas = faltas.filter(f => f.data.startsWith(mes));
+  faltas.sort((a,b) => b.data.localeCompare(a.data));
+
+  if (!faltas.length) return alert('Nenhuma ocorrência para enviar');
+
+  const tipoLabel = { falta_inj:'❌ Falta Injust.', falta_just:'📋 Falta Just.', atraso:'⚠️ Atraso', advertencia:'⛔ Advertência' };
+  let msg = '📋 *RELATÓRIO DE OCORRÊNCIAS*\n';
+  msg += '🏪 *Alfredo Supermercado*\n';
+  if (mes) { const [a,m] = mes.split('-'); msg += '📅 Período: ' + m + '/' + a + '\n'; }
+  msg += '━━━━━━━━━━━━━━━━━━━━\n\n';
+
+  const grupos = {};
+  faltas.forEach(f => {
+    const colab = db.colaboradores.find(c => c.id === f.colabId);
+    const nome = colab ? colab.nome : 'ID#' + f.colabId;
+    if (!grupos[nome]) grupos[nome] = [];
+    grupos[nome].push(f);
+  });
+
+  Object.entries(grupos).forEach(([nome, fs]) => {
+    msg += '👷 *' + nome + '*\n';
+    fs.forEach(f => {
+      const [a,m,d] = f.data.split('-');
+      const numAnexos = (db.anexos_faltas || []).filter(ax => ax.faltaId === f.id).length;
+      msg += '  ' + (tipoLabel[f.tipo] || f.tipo) + ' — ' + d + '/' + m + '/' + a;
+      if (f.obs) msg += ' (' + f.obs + ')';
+      if (numAnexos) msg += ' 📎' + numAnexos;
+      msg += '\n';
+    });
+    msg += '\n';
+  });
+
+  msg += '_Total: ' + faltas.length + ' ocorrência(s)_\n';
+  msg += '_Gerado pelo Alfredo ERP V13_';
+
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
+
+// ═══════════════════════════════════════════
+//  PATCH: renderResumoMesFaltas para advertências
+// ═══════════════════════════════════════════
+const _origRenderResumo = renderResumoMesFaltas;
+renderResumoMesFaltas = function() {
+  const [ano, mes] = db.mesAtual.split('-').map(Number);
+  const tit = document.getElementById('resumo-mes-titulo');
+  if (tit) tit.textContent = MESES[mes-1] + ' ' + ano;
+  const fm = db.faltas.filter(f => f.data.startsWith(db.mesAtual));
+  const el = document.getElementById('resumo-mes-faltas');
+  if (!el) return;
+  if (!fm.length) { el.innerHTML = '<p style="color:var(--dim);text-align:center;padding:1.5rem">Nenhuma ocorrência este mês</p>'; return; }
+  const tipoLabel = { falta_inj:'Falta Injust.', falta_just:'Falta Just.', atraso:'Atraso', advertencia:'Advertência' };
+  const tipoCls = { falta_inj:'bdanger2', falta_just:'bwarn2', atraso:'bgray', advertencia:'bdanger2' };
+  let html = '';
+  db.colaboradores.forEach(colab => {
+    const fs = fm.filter(f => f.colabId === colab.id);
+    if (!fs.length) return;
+    const score = calcScore(colab.id);
+    html += '<div class="row-item" style="flex-direction:column;align-items:flex-start;gap:.4rem;margin-bottom:.5rem">';
+    html += '<div style="display:flex;justify-content:space-between;width:100%;align-items:center">';
+    html += '<strong>' + colab.nome + '</strong>';
+    html += '<span style="font-weight:700;color:' + (score>80?'var(--ok)':score>60?'var(--warn)':'var(--danger)') + '">' + score + ' pts</span>';
+    html += '</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:.3rem">';
+    html += fs.map(f => '<span class="badge ' + (tipoCls[f.tipo]||'bgray') + '">' + (tipoLabel[f.tipo]||f.tipo) + ' (' + f.data.split('-').reverse().slice(0,2).join('/') + ')</span>').join('');
+    html += '</div></div>';
+  });
+  el.innerHTML = html || '<p style="color:var(--dim)">Sem ocorrências</p>';
+};
+
+// ═══════════════════════════════════════════
+//  Adicionar botão WhatsApp na pesquisa de faltas
+// ═══════════════════════════════════════════
+(function() {
+  const pesqCard = document.querySelector('#faltas-pesquisar .card');
+  if (pesqCard) {
+    const btnBuscar = pesqCard.querySelector('button');
+    if (btnBuscar) {
+      const waBtn = document.createElement('button');
+      waBtn.className = 'bs';
+      waBtn.style.cssText = 'width:auto;padding:.65rem 1rem;background:#25d366;margin-left:.5rem;display:inline-flex';
+      waBtn.innerHTML = '<i class="fab fa-whatsapp"></i> Enviar Relatório';
+      waBtn.onclick = enviarRelatorioFaltasWA;
+      btnBuscar.parentElement.style.display = 'flex';
+      btnBuscar.parentElement.style.gap = '.5rem';
+      btnBuscar.parentElement.style.flexWrap = 'wrap';
+      btnBuscar.after(waBtn);
+    }
+  }
+})();
 </script>
 </body>
 </html>
